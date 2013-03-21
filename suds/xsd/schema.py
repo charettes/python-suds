@@ -58,7 +58,7 @@ class SchemaCollection:
         self.wsdl = wsdl
         self.children = []
         self.namespaces = {}
-        self.importedSchemas = {}
+        self.imported_schemas = {}
         
     def add(self, schema):
         """
@@ -191,7 +191,7 @@ class Schema:
     
     Tag = 'schema'
     
-    def __init__(self, root, baseurl, options, container=None):
+    def __init__(self, root, baseurl, options, container):
         """
         @param root: The xml root.
         @type root: L{sax.element.Element}
@@ -222,12 +222,12 @@ class Schema:
             self.form_qualified = False
         else:
             self.form_qualified = ( form == 'qualified' )
-        if container is None:
-            self.build()
-            self.open_imports(options)
-            log.debug('built:\n%s', self)
-            self.dereference()
-            log.debug('dereferenced:\n%s', self)
+        self.build()
+        self.container.imported_schemas.setdefault(self.baseurl, self)
+        self.open_imports(options)
+        log.debug('built:\n%s', self)
+        self.dereference()
+        log.debug('dereferenced:\n%s', self)
                 
     def mktns(self):
         """
@@ -302,17 +302,18 @@ class Schema:
         @param options: An options dictionary.
         @type options: L{options.Options}
         """
+        imported_schemas = self.container.imported_schemas
         for imp in self.imports:
-            imported = imp.open(options)
+            location = imp.location
+            imported = imported_schemas.get(location)
             if imported is None:
-                continue
-            if imported.tns[1] not in self.container.importedSchemas:
-                self.container.importedSchemas[imported.tns[1]] = imported
+                imported = imp.open(options)
+                if imported is None:
+                    continue
                 imported.open_imports(options)
                 log.debug('imported:\n%s', imported)
             self.merge(imported)
 
-            
     def dereference(self):
         """
         Instruct all children to perform dereferencing.
@@ -398,7 +399,7 @@ class Schema:
         @rtype: L{Schema}
         @note: This is only used by Import children.
         """
-        return Schema(root, baseurl, options)
+        return Schema(root, baseurl, options, self.container)
 
     def str(self, indent=0):
         tab = '%*s'%(indent*3, '')
